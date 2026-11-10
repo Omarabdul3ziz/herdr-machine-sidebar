@@ -5,7 +5,7 @@
 // Hover shows × to close; drag a row onto another of the same machine to move its tab there.
 // A machine's header folds it; folded, it shows its most urgent agent state.
 // Rows run in one flat list per machine, asking first, then working, then done (done,
-// idle and shells); each row is tinted to say which: red, blue, green.
+// idle and shells); a bold bar at each row's edge says which: red, blue, green.
 //
 // The line at the bottom starts an agent, parsed without AI: `@machine #agent ~/folder
 // what to do` (defaults: local, claude, home). Clicking it (or ctrl+shift+d) opens it
@@ -197,9 +197,9 @@ function groupsOf(machine, all, byPane) {
   const working = rows.filter((r) => stateOf(r.t, r.pane) === "working");
   const done = rows.filter((r) => !asking.includes(r) && !working.includes(r));
   return [
-    { color: "ansi1", alpha: "38", rows: asking },
-    { color: "ansi4", alpha: "2e", rows: working },
-    { color: "ansi2", alpha: "1c", rows: done },
+    { color: "ansi1", rows: asking },
+    { color: "ansi4", rows: working },
+    { color: "ansi2", rows: done },
   ];
 }
 
@@ -408,12 +408,6 @@ export default class Sidebar extends View {
     const shown = focused()?.terminal ?? null;
     const here = spaces().find((p) => p.active)?.machine ?? null;
 
-    // A theme color as a see-through row tint; the shown row keeps its own highlight.
-    const tint = (g) => {
-      const c = th[g.color];
-      return /^#[0-9a-f]{6}$/i.test(c ?? "") ? c + g.alpha : C.hover;
-    };
-
     const row = (term, g) => {
       const pane = byPane.find((p) => p.terminal === term.address);
       const on = term.address === shown;
@@ -423,7 +417,7 @@ export default class Sidebar extends View {
         .id(`ms-${term.address}`)
         .h(32)
         .ml(6)
-        .pl(8)
+        .pl(4)
         .pr(8)
         .gap(8)
         .items_center()
@@ -431,9 +425,8 @@ export default class Sidebar extends View {
         .border_1()
         .cursor_pointer()
         .text_size(13)
-        .bg(tint(g))
-        .when(on, (el) => el.border_color(C.rowEdge))
-        .when(!on, (el) => el.border_color("#00000000").hover((s) => s.border_color(C.rowEdge)))
+        .when(on, (el) => el.bg(C.row).border_color(C.rowEdge))
+        .when(!on, (el) => el.border_color("#00000000").hover((s) => s.bg(C.hover)))
         .when(target, (el) => el.border_color(th.accent))
         .on_hover((hover, cx) => {
           if (hover) this.hovered = term.address;
@@ -458,6 +451,7 @@ export default class Sidebar extends View {
           pane &&
           openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: pane.tab, space: spaceOf(machineOf(term.address))?.id } } }),
         )
+        .child(div().flex_none().w(5).h(24).rounded(3).bg(th[g.color]))
         .when(Boolean(term.parent), (el) => el.child(div().flex_none().text_color(C.dim).child("↳")))
         .child(tile(th, program(term, pane), stateOf(term, pane)))
         .child(div().flex_1().min_w(0).truncate().text_color(on ? C.text : "#c4c6ca").child(label(term, pane, tab)))

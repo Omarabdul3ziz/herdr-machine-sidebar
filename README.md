@@ -11,7 +11,7 @@ program's title. Sub-agents are marked `↳`.
 - A folded machine shows its row count and its most urgent agent state.
 - `ctrl+tab` / `ctrl+shift+tab` step through every row (see `keys.json`).
 - Rows run asking first, then working, then done (done, idle and shells),
-  each row tinted red, blue or green instead of headers.
+  with a bold red, blue or green bar at the edge instead of headers.
 - The line at the bottom (or ctrl+shift+d) opens a dialog that starts an agent, parsed without AI:
   `@machine #agent ~/folder what to do` — `@` a machine (`local` or any
   `hc machine`), `#` one of `claude`, `pi`, `omp`, a path, in any order; the
