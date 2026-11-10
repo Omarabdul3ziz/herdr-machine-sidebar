@@ -242,6 +242,17 @@ export default class Sidebar extends View {
         cx.notify();
       });
       cx.timer.after(30, () => this.area.focus());
+      // voxtype's own state (idle, recording, transcribing), so the 🎙 says what it is doing.
+      this.mic = "idle";
+      cx.timer.every(400, (cx) =>
+        exec("voxtype", ["status"])
+          .then((r) => {
+            const now = r.code ? "idle" : r.stdout.trim();
+            if (now !== this.mic) [this.mic, this.error] = [now, null];
+          })
+          .catch(() => {})
+          .finally(() => cx.notify()),
+      );
       return;
     }
     // Label new agents with their resume command while they still run it.
@@ -305,9 +316,12 @@ export default class Sidebar extends View {
     });
   }
 
+  // One press starts, the next stops and types the words in here. While it transcribes,
+  // a press would be ignored by voxtype, so it is ignored here too.
   voice(cx) {
+    if (this.mic === "transcribing") return;
     this.area.focus();
-    exec("voxtype", ["record", "toggle"])
+    exec("voxtype", ["record", this.mic === "recording" ? "stop" : "start"])
       .then((r) => {
         if (r.code) this.error = `voice: ${r.stderr.trim() || "voxtype failed"}`;
       })
@@ -391,9 +405,10 @@ export default class Sidebar extends View {
               .rounded(6)
               .cursor_pointer()
               .hover((s) => s.bg(th.hover))
-              .tooltip("Dictate (voxtype)")
+              .tooltip(this.mic === "recording" ? "Stop and type it in" : "Dictate (voxtype)")
               .on_click((_e, cx) => this.voice(cx))
-              .child("🎙"),
+              .when(this.mic === "recording", (el) => el.gap(6).text_color(th.blocked).bg(th.hover))
+              .child(this.mic === "recording" ? "● listening — click to stop" : this.mic === "transcribing" ? "… writing" : "🎙"),
           ),
       )
       .when(Boolean(this.error), (el) => el.child(div().text_size(12).text_color(th.blocked).child(this.error)));
