@@ -561,7 +561,7 @@ export default class Sidebar extends View {
         .when(!folded, (el) =>
           el.children(
             groups.flatMap((g) => [
-              ...(g.title ? [div().pl(14).pt(4).text_size(10.5).text_color(C.dim).child(`${g.title} ${g.rows.length}`)] : []),
+              ...(g.title ? [div().pl(14).pt(4).text_size(10.5).text_color(C.dim).child(g.title)] : []),
               ...g.rows.map((r) => row(r.t)),
             ]),
           ),
