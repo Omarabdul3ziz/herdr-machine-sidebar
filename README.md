@@ -1,42 +1,72 @@
-# machine-sidebar
+# Machines — a herdr-app layout
 
-A [herdr-app](https://herdr.dev) sidebar mod for working across several
-machines. Each machine (this computer and every `hc machine`) is a foldable
-header; under it, every terminal on that machine is one flat row: the program's
-icon with its agent state, then the tab's name, the shell's folder or the
-program's title. Sub-agents are marked `↳`.
+A sidebar for running agents on several machines with
+[herdr-app](https://herdr.dev) and herdr-core (`hc`). Every machine is a
+foldable header with each of its terminals under it in one flat list, asking
+first; a small bot above it acts out what needs you; one line at the bottom
+starts an agent on any machine.
 
-- Click a row to show it; hover for × to close; drag onto another row of the
-  same machine to move its tab.
-- A folded machine shows its row count and its most urgent agent state.
-- `ctrl+tab` / `ctrl+shift+tab` step through every row (see `keys.json`).
-- Rows run asking first, then working, then done (done, idle and shells),
-  with a bold red, blue or green bar at the edge instead of headers.
-- The line at the bottom (or ctrl+shift+d) opens a dialog that starts an agent, parsed without AI:
-  `@machine #agent ~/folder what to do` — `@` a machine (`local` or any
-  `hc machine`), `#` one of `claude`, `pi`, `omp`, a path, in any order; the
-  rest is the first message. Defaults: local, claude, home. 🎙 dictates with
-  voxtype. A script can send the same line:
-  `herdr-app do "machine-sidebar.send @devbox #pi fix it"`.
-- Each agent it starts gets its resume command as an hc label (`resume=`);
-  claude and pi get a session id picked at start, omp resumes the folder's
-  latest session. After a reboot the terminal comes back as a shell and its
-  machine shows **Restore N**, which types the command in again
-  (`herdr-app do machine-sidebar.restore` does every machine).
-- Settings sits at the bottom (Add machine is in Settings).
+![Machines](preview.png)
 
-Install: link or copy `mods/machine-sidebar` into `~/.config/herdr-app/mods/`,
-merge `keys.json`, and use it as a layout's sidebar block
-(`"content": { "mod": "machine-sidebar" }`).
+Two mods and a layout:
 
-## sidebar-bot
+- **`machine-sidebar`** — the machine list, the dispatcher line and Restore.
+- **`sidebar-bot`** — the bot and its thought cloud.
+- **`layouts/machines.json`** — the bot (160 px) above the list in a 220 px
+  sidebar, terminals beside it.
 
-A small bot drawn from theme-coloured boxes, meant as a 160 px block above the
-sidebar. It acts out the most urgent agent on any machine: asleep when nothing
-runs, at a laptop while agents work, antenna pulsing red with a bubble when one
-needs you, a hop and sparkles when one is done. Its thoughts pop up in a cloud
-above it: what needs you comes back every few seconds, otherwise a passing
-thought now and then. Click it to jump to that agent;
-`ctrl+shift+y` hides it (`layout.toggle:bot`). In the layout, the sidebar is a
-column: `{ "id": "bot", "size": { "px": 160 }, "content": { "mod": "sidebar-bot" } }`
-above the `machine-sidebar` block.
+## Install
+
+```bash
+git clone https://github.com/Omarabdul3ziz/herdr-machine-sidebar.git
+cd herdr-machine-sidebar
+cp -r mods/machine-sidebar mods/sidebar-bot ~/.config/herdr-app/mods/
+cp layouts/machines.json ~/.config/herdr-app/layouts/
+herdr-app do layout.switch --name machines
+```
+
+Merge `keys.json` into `~/.config/herdr-app/keys.json` for the keys below.
+Add your other machines with `hc machine add` (or Settings → Machines); one
+space per machine is assumed.
+
+## Use
+
+- **Rows**: asking first (red bar), working (blue), then done, idle and shells
+  (green). Click to show; hover for ×; drag onto another row of the same
+  machine to move its tab. Click a machine's header to fold it.
+- **`ctrl+tab` / `ctrl+shift+tab`**: every row, in the order shown.
+- **`ctrl+shift+d`** (or click the line): start an agent.
+  `@devbox #pi ~/src/app fix the login bug` — `@` a machine (`local` or any
+  `hc machine`), `#` any agent herdr-app knows that is installed there, a
+  path; the rest is its first message. Defaults: local, claude, home. No AI
+  parses it. 🎙 dictates with [voxtype](https://voxtype.io) if installed.
+  Scripts can send a line: `herdr-app do "machine-sidebar.send @devbox hi"`.
+- **Restore**: after a reboot, agents the line started come back as shells and
+  their machine shows **Restore N**; one click resumes them (claude and pi by
+  session id, omp its folder's latest session).
+  `herdr-app do machine-sidebar.restore` does every machine.
+- **`ctrl+shift+y`**: hide or show the bot. Click it to jump to what needs you.
+
+## Restore every Claude, not only the dispatched ones
+
+`hooks/claude-hc-resume.sh` is a Claude Code hook: in an hc terminal it saves
+`claude --resume <session id>` on the terminal when a session starts and clears
+it when you quit on purpose. Copy it to `~/.claude/hooks/` and add to
+`~/.claude/settings.json` (needs `jq`):
+
+```json
+"hooks": {
+  "SessionStart": [{ "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/claude-hc-resume.sh start" }] }],
+  "SessionEnd":   [{ "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/claude-hc-resume.sh end" }] }]
+}
+```
+
+## What it runs
+
+The mods run `hc label` and `hc send` (resume labels and Restore),
+`printenv HOME` on a remote machine (to expand `~`), and `voxtype record` /
+`voxtype status` (dictation). Restore only ever types one of
+`claude --resume <id>`, `pi --session-id <id>` or `omp --continue`. They read
+no files and make no network calls.
+
+MIT licensed.
