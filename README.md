@@ -12,7 +12,7 @@ program's title. Sub-agents are marked `↳`.
 - `ctrl+tab` / `ctrl+shift+tab` step through every row (see `keys.json`).
 - When a machine has agents asking or working, its rows group into Asking,
   Working and Done (done, idle and shells).
-- The line at the bottom starts an agent, parsed without AI:
+- The line at the bottom (or ctrl+shift+d) opens a dialog that starts an agent, parsed without AI:
   `@machine #agent ~/folder what to do` — `@` a machine (`local` or any
   `hc machine`), `#` one of `claude`, `pi`, `omp`, a path, in any order; the
   rest is the first message. Defaults: local, claude, home. 🎙 dictates with
@@ -23,7 +23,7 @@ program's title. Sub-agents are marked `↳`.
   latest session. After a reboot the terminal comes back as a shell and its
   machine shows **Restore N**, which types the command in again
   (`herdr-app do machine-sidebar.restore` does every machine).
-- Settings and Add machine sit at the bottom.
+- Settings sits at the bottom (Add machine is in Settings).
 
 Install: link or copy `mods/machine-sidebar` into `~/.config/herdr-app/mods/`,
 merge `keys.json`, and use it as a layout's sidebar block

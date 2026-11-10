@@ -2,6 +2,7 @@
   "global": {
     "ctrl-tab": "machine-sidebar.next",
     "ctrl-shift-tab": "machine-sidebar.prev",
-    "ctrl-shift-y": "layout.toggle:bot"
+    "ctrl-shift-y": "layout.toggle:bot",
+    "ctrl-shift-d": "machine-sidebar.compose"
   }
 }

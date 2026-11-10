@@ -8,13 +8,14 @@
 // (done, idle and shells).
 //
 // The line at the bottom starts an agent, parsed without AI: `@machine #agent ~/folder
-// what to do` (defaults: local, claude, home). Each agent started carries its resume
+// what to do` (defaults: local, claude, home). Clicking it (or ctrl+shift+d) opens it
+// big in a dialog — this same mod with props.composer — showing where the line will go. Each agent started carries its resume
 // command as an hc label; after a reboot it comes back as a shell, and its machine's
 // Restore button types the command in again.
 
 import { View, div, svg, image } from "gpui-kit";
-import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { spaces, panes, terminals, machines, focused, run, theme, openOverlay, nextCommand, hc, exec, home as homeDir } from "herdr";
+import { v_flex, h_flex, TextareaState, Textarea } from "gpui-base";
+import { spaces, panes, terminals, machines, focused, run, theme, openOverlay, closeOverlay, props, nextCommand, hc, exec, home as homeDir } from "herdr";
 
 const C = {
   // The shown terminal stands out; a hovered one only hints, so the two never look alike.
@@ -218,19 +219,32 @@ function restore(lost) {
   for (const t of lost) hc(["send", t.address, t.labels.resume]);
 }
 
+const PLACEHOLDER = "@machine #agent ~/folder what to do";
+const machineNames = () => machines().map((m) => m.name).filter(Boolean);
+
+function compose(value = "") {
+  openOverlay({ mod: "machine-sidebar", kind: "dialog", width: 640, props: { composer: true, value } });
+}
+
 export default class Sidebar extends View {
   init(_props, cx) {
     this.folded = loadFolded();
     this.homes = {};
     this.error = null;
-    this.input = InputState.new({ placeholder: "@machine #agent ~/folder what to do" });
-    this.input.on("submit", (_e, cx) => this.send(cx));
-    this.input.on("change", (_e, cx) => {
-      if (this.error) {
+    // The dialog: a big textarea, and nothing else this mod does in the sidebar.
+    if (props()?.composer) {
+      this.area = TextareaState.new({ placeholder: PLACEHOLDER, value: props().value ?? "" });
+      this.area.set_auto_grow(3, 10);
+      this.area.on("submit", (e, cx) => {
+        if (!e.shift) this.send(cx, this.area.value());
+      });
+      this.area.on("change", (_e, cx) => {
         this.error = null;
         cx.notify();
-      }
-    });
+      });
+      cx.timer.after(30, () => this.area.focus());
+      return;
+    }
     // Label new agents with their resume command while they still run it.
     cx.timer.every(3000, () => {
       for (const t of terminals()) {
@@ -245,10 +259,8 @@ export default class Sidebar extends View {
         const step = c === "next" ? 1 : c === "prev" ? -1 : 0;
         if (step) this.step(step);
         // `herdr-app do "machine-sidebar.send @devbox #pi fix it"`: the same line, from a script.
-        if (c.startsWith("send ")) {
-          this.input.set_value(c.slice(5));
-          this.send(cx);
-        }
+        if (c.startsWith("send ")) this.send(cx, c.slice(5));
+        if (c === "compose") compose();
         // `herdr-app do machine-sidebar.restore`: every machine's Restore at once.
         if (c === "restore") {
           const all = terminals();
@@ -270,14 +282,14 @@ export default class Sidebar extends View {
     return this.homes[machine] ?? null;
   }
 
-  send(cx) {
-    const p = parse(this.input.value(), machines().map((m) => m.name).filter(Boolean));
+  send(cx, text) {
+    const p = parse(text, machineNames());
     if (p.error) {
       this.error = p.error;
       cx.notify();
       return;
     }
-    this.input.set_value("");
+    if (this.area) closeOverlay(props().overlay);
     cx.spawn(async (cx) => {
       let folder = p.folder;
       if (folder.startsWith("~")) {
@@ -295,7 +307,7 @@ export default class Sidebar extends View {
   }
 
   voice(cx) {
-    this.input.focus();
+    this.area.focus();
     exec("voxtype", ["record", "toggle"])
       .then((r) => {
         if (r.code) this.error = `voice: ${r.stderr.trim() || "voxtype failed"}`;
@@ -319,7 +331,77 @@ export default class Sidebar extends View {
     open(next, byPane.find((p) => p.terminal === next.address));
   }
 
+  // The dialog: what you type, where it goes, how to send it.
+  composer() {
+    const th = theme();
+    const text = this.area.value();
+    const p = text.trim() ? parse(text, machineNames()) : null;
+    const chip = (k, v) =>
+      h_flex()
+        .gap(5)
+        .px(8)
+        .h(24)
+        .items_center()
+        .rounded(6)
+        .bg(th.raised)
+        .text_size(12)
+        .child(div().text_color(th.dim).child(k))
+        .child(div().text_color(th.foreground).child(v));
+    const where =
+      p && !p.error
+        ? h_flex()
+            .gap(6)
+            .child(chip("on", p.machine ?? "local"))
+            .child(chip("agent", p.harness))
+            .child(chip("in", p.folder || "~"))
+        : div()
+            .text_size(12)
+            .text_color(p?.error ? th.blocked : th.dim)
+            .child(p?.error ?? "@machine  #claude | #pi | #omp  ~/folder — then what to do");
+    return v_flex()
+      .p(14)
+      .gap(10)
+      .child(div().text_size(13).text_color(th.muted).child("Start an agent"))
+      .child(
+        Textarea.new(this.area)
+          .w_full()
+          .px(10)
+          .py(8)
+          .rounded(8)
+          .bg(th.input)
+          .border_1()
+          .border_color(this.error ? th.blocked : th.border)
+          .text_size(15)
+          .text_color(th.foreground),
+      )
+      .child(where)
+      .child(
+        h_flex()
+          .gap(8)
+          .items_center()
+          .text_size(11.5)
+          .text_color(th.dim)
+          .child(div().flex_1().child("Enter sends · Shift+Enter new line · Esc closes"))
+          .child(
+            div()
+              .id("ms-mic")
+              .px(8)
+              .h(26)
+              .flex()
+              .items_center()
+              .rounded(6)
+              .cursor_pointer()
+              .hover((s) => s.bg(th.hover))
+              .tooltip("Dictate (voxtype)")
+              .on_click((_e, cx) => this.voice(cx))
+              .child("🎙"),
+          ),
+      )
+      .when(Boolean(this.error), (el) => el.child(div().text_size(12).text_color(th.blocked).child(this.error)));
+  }
+
   render() {
+    if (this.area) return this.composer();
     const th = theme();
     const tabs = spaces().flatMap((s) => s.tabs);
     const all = terminals();
@@ -502,45 +584,27 @@ export default class Sidebar extends View {
         .child(svg(ICON(icon)).size(14))
         .child(text);
 
-    const composer = v_flex()
+    // Looks like an input; opens the dialog, where the line has room.
+    const composer = own(h_flex())
+      .id("ms-compose")
       .flex_none()
-      .px(8)
-      .pt(8)
-      .gap(4)
-      .child(
-        own(h_flex())
-          .gap(6)
-          .items_center()
-          .child(
-            Input.new(this.input)
-              .flex_1()
-              .h(32)
-              .px(10)
-              .rounded(8)
-              .bg(C.chip)
-              .border_1()
-              .border_color(this.error ? th.blocked : "#ffffff14")
-              .text_size(12.5)
-              .text_color(C.text),
-          )
-          .child(
-            div()
-              .id("ms-mic")
-              .w(28)
-              .h(28)
-              .flex_none()
-              .flex()
-              .items_center()
-              .justify_center()
-              .rounded(7)
-              .cursor_pointer()
-              .hover((s) => s.bg(C.chip))
-              .tooltip("Dictate (voxtype)")
-              .on_click((_e, cx) => this.voice(cx))
-              .child("🎙"),
-          ),
-      )
-      .when(Boolean(this.error), (el) => el.child(div().px(4).text_size(11).text_color(th.blocked).child(this.error)));
+      .mx(8)
+      .mt(8)
+      .h(32)
+      .px(10)
+      .gap(8)
+      .items_center()
+      .rounded(8)
+      .bg(C.chip)
+      .border_1()
+      .border_color("#ffffff14")
+      .cursor_text()
+      .text_size(12.5)
+      .text_color(C.dim)
+      .hover((s) => s.border_color(C.rowEdge))
+      .on_click(() => compose())
+      .child(div().flex_1().truncate().child(PLACEHOLDER))
+      .child(div().text_size(10.5).child("ctrl+shift+d"));
 
     return v_flex()
       .id("ms-tree")
@@ -560,8 +624,7 @@ export default class Sidebar extends View {
           .pb(8)
           .border_t_1()
           .border_color("#ffffff0d")
-          .child(footRow("ms-settings", "settings", "Settings", () => run("app.settings")))
-          .child(footRow("ms-add-machine", "server", "Add machine", () => run("mod.open", { name: "machine-add" }))),
+          .child(footRow("ms-settings", "settings", "Settings", () => run("app.settings"))),
       );
   }
 }
