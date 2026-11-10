@@ -10,8 +10,8 @@ program's title. Sub-agents are marked `↳`.
   same machine to move its tab.
 - A folded machine shows its row count and its most urgent agent state.
 - `ctrl+tab` / `ctrl+shift+tab` step through every row (see `keys.json`).
-- When a machine has agents asking or working, its rows group into Asking,
-  Working and Done (done, idle and shells).
+- Rows run asking first, then working, then done (done, idle and shells),
+  with a red, blue or green bar at the edge instead of headers.
 - The line at the bottom (or ctrl+shift+d) opens a dialog that starts an agent, parsed without AI:
   `@machine #agent ~/folder what to do` — `@` a machine (`local` or any
   `hc machine`), `#` one of `claude`, `pi`, `omp`, a path, in any order; the

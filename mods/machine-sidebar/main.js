@@ -4,8 +4,8 @@
 // folder or the program's title. ↳ marks a sub-agent (a terminal another one started).
 // Hover shows × to close; drag a row onto another of the same machine to move its tab there.
 // A machine's header folds it; folded, it shows its most urgent agent state.
-// Rows group by state when a machine has any asking or working: Asking, Working, Done
-// (done, idle and shells).
+// Rows run in one flat list per machine, asking first, then working, then done (done,
+// idle and shells); a bar at each row's edge says which: red, blue, green.
 //
 // The line at the bottom starts an agent, parsed without AI: `@machine #agent ~/folder
 // what to do` (defaults: local, claude, home). Clicking it (or ctrl+shift+d) opens it
@@ -196,12 +196,11 @@ function groupsOf(machine, all, byPane) {
   const asking = rows.filter((r) => stateOf(r.t, r.pane) === "blocked");
   const working = rows.filter((r) => stateOf(r.t, r.pane) === "working");
   const done = rows.filter((r) => !asking.includes(r) && !working.includes(r));
-  if (!asking.length && !working.length) return [{ title: null, rows: done }];
   return [
-    { title: "Asking", rows: asking },
-    { title: "Working", rows: working },
-    { title: "Done", rows: done },
-  ].filter((g) => g.rows.length);
+    { color: "ansi1", rows: asking },
+    { color: "ansi4", rows: working },
+    { color: "ansi2", rows: done },
+  ];
 }
 
 // Terminals that held an agent we started and came back as a shell after a loss.
@@ -409,7 +408,7 @@ export default class Sidebar extends View {
     const shown = focused()?.terminal ?? null;
     const here = spaces().find((p) => p.active)?.machine ?? null;
 
-    const row = (term) => {
+    const row = (term, color) => {
       const pane = byPane.find((p) => p.terminal === term.address);
       const on = term.address === shown;
       const tab = tabs.find((c) => c.id === pane?.tab);
@@ -418,7 +417,7 @@ export default class Sidebar extends View {
         .id(`ms-${term.address}`)
         .h(32)
         .ml(6)
-        .pl(8)
+        .pl(4)
         .pr(8)
         .gap(8)
         .items_center()
@@ -452,6 +451,7 @@ export default class Sidebar extends View {
           pane &&
           openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: pane.tab, space: spaceOf(machineOf(term.address))?.id } } }),
         )
+        .child(div().flex_none().w(3).h(16).rounded(2).bg(th[color]))
         .when(Boolean(term.parent), (el) => el.child(div().flex_none().text_color(C.dim).child("↳")))
         .child(tile(th, program(term, pane), stateOf(term, pane)))
         .child(div().flex_1().min_w(0).truncate().text_color(on ? C.text : "#c4c6ca").child(label(term, pane, tab)))
@@ -560,10 +560,7 @@ export default class Sidebar extends View {
         )
         .when(!folded, (el) =>
           el.children(
-            groups.flatMap((g) => [
-              ...(g.title ? [div().pl(14).pt(4).text_size(10.5).text_color(C.dim).child(g.title)] : []),
-              ...g.rows.map((r) => row(r.t)),
-            ]),
+            groups.flatMap((g) => g.rows.map((r) => row(r.t, g.color))),
           ),
         );
     };
