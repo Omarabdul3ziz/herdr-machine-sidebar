@@ -49,20 +49,34 @@ export default class Bot extends View {
     this.x = HOME_X;
     this.blink = false;
     this.hop = false;
+    this.look = 0;
     this.last = null;
-    // Blink now and then, and wander when nothing needs saying.
-    cx.timer.every(1500, (cx) => {
+    // Small things now and then: blink, glance, hop, stroll. Asleep, it mostly stays put;
+    // with a bubble up it keeps near home so the bubble has room.
+    cx.timer.every(1200, (cx) => {
       const { top } = fleet();
-      this.react(top?.state ?? "idle", cx);
-      if (!this.blink && Math.random() < 0.18) {
-        this.blink = true;
-        cx.timer.after(160, (cx) => {
-          this.blink = false;
-          cx.notify();
-        });
+      const state = top?.state ?? "idle";
+      const asleep = !top;
+      const roll = Math.random;
+      this.react(state, cx);
+      if (!this.blink && roll() < 0.2) this.flash(cx, "blink", 160);
+      if (!asleep && roll() < 0.25) this.look = [-2, 0, 2][Math.floor(roll() * 3)];
+      if (!asleep && roll() < (state === "blocked" ? 0.25 : 0.12)) {
+        this.flash(cx, "hop", 200);
+        if (roll() < 0.3) cx.timer.after(450, (cx) => this.flash(cx, "hop", 200));
       }
-      if (!top && Math.random() < 0.2) this.x = HOME_X + Math.round(Math.random() * 110);
-      if (top) this.x = HOME_X;
+      const bubble = state === "blocked" || state === "done";
+      if (roll() < (asleep ? 0.03 : 0.22)) this.x = HOME_X + Math.round(roll() * (bubble ? 16 : 120));
+      cx.notify();
+    });
+  }
+
+  // Sets a flag for a moment (a blink, a hop) and redraws when it ends.
+  flash(cx, flag, ms) {
+    this[flag] = true;
+    cx.notify();
+    cx.timer.after(ms, (cx) => {
+      this[flag] = false;
       cx.notify();
     });
   }
@@ -72,11 +86,7 @@ export default class Bot extends View {
     if (state === this.last) return;
     this.last = state;
     if (state !== "done" && state !== "blocked") return;
-    this.hop = true;
-    cx.timer.after(220, (cx) => {
-      this.hop = false;
-      cx.notify();
-    });
+    this.flash(cx, "hop", 220);
   }
 
   render() {
@@ -89,16 +99,16 @@ export default class Bot extends View {
     const eyeTop = state === "working" ? 13 : 10;
 
     const eye = (left) =>
-      div().absolute().left(left).top(eyeTop + (7 - eyeH) / 2).w(7).h(eyeH).rounded(2).bg(asleep ? th.dim : th.foreground);
+      div().absolute().left(left + this.look).top(eyeTop + (7 - eyeH) / 2).w(7).h(eyeH).rounded(2).bg(asleep ? th.dim : th.foreground).transition("left", 180);
 
     const bot = div()
       .absolute()
       .left(this.x)
-      .top(this.hop ? BASE - 10 : BASE)
+      .top(this.hop ? BASE - 12 : BASE)
       .w(44)
       .h(58)
       .transition("left", { duration: 2400, easing: "ease-in-out" })
-      .spring("top", { response: 260, damping: 0.55 })
+      .spring("top", { response: 240, damping: 0.5 })
       .opacity(asleep ? 0.6 : 1)
       // antenna: a stick and a light that pulses unless asleep
       .child(div().absolute().left(21).top(0).w(2).h(9).bg(th.border))
@@ -119,6 +129,7 @@ export default class Bot extends View {
           .absolute()
           .left(0)
           .top(9)
+          .when(!asleep, (el) => el.loop("top", { from: 9, to: 11, period: 2600 }))
           .w(44)
           .h(30)
           .rounded(10)
@@ -164,7 +175,8 @@ export default class Bot extends View {
             : null;
     const bubble = div()
       .absolute()
-      .left(HOME_X + 54)
+      .left(this.x + 54)
+      .transition("left", { duration: 2400, easing: "ease-in-out" })
       .right(10)
       .top(BASE + 4)
       .px(8)
