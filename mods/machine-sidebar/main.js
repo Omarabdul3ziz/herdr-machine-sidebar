@@ -15,18 +15,21 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, TextareaState, Textarea } from "gpui-base";
-import { spaces, panes, terminals, machines, focused, run, theme, openOverlay, closeOverlay, props, nextCommand, hc, exec, home as homeDir } from "herdr";
+import { spaces, panes, terminals, machines, focused, run, theme, openOverlay, closeOverlay, props, nextCommand, knownAgents, hc, exec, home as homeDir } from "herdr";
 
-const C = {
-  // The shown terminal stands out; a hovered one only hints, so the two never look alike.
-  row: "#34373c",
-  rowEdge: "#4a4d53",
-  hover: "#ffffff07",
-  chip: "#252628",
-  text: "#e8e9eb",
-  dim: "#8b8f95",
-  bg: "#131619",
-};
+// Colors come from the theme, so the sidebar follows light and dark alike. The shown
+// terminal stands out; a hovered one only hints, so the two never look alike.
+let C = {};
+const palette = (th) => ({
+  row: th.raised,
+  rowEdge: th.border,
+  hover: th.hover,
+  chip: th.surface,
+  text: th.foreground,
+  muted: th.muted,
+  dim: th.dim,
+  bg: th.chrome,
+});
 
 // A control in the draggable sidebar: the press is its own, not the window's
 // (a right press there would open the system's window menu).
@@ -91,7 +94,7 @@ function tile(th, g, status) {
     .h(22)
     .rounded(6)
     .border_1()
-    .border_color("#ffffff14")
+    .border_color(C.rowEdge)
     .bg(g?.tile ?? C.chip)
     .flex()
     .items_center()
@@ -150,6 +153,18 @@ const uuid = () =>
     return (c === "x" ? r : (r & 3) | 8).toString(16);
   });
 
+// The agents herdr-app knows how to start on each machine, and whether each is installed
+// there ("local" for this one). Filled in the background; until then only HARNESS counts.
+const TOOLS = {};
+function loadTools() {
+  for (const m of machines()) {
+    const key = m.name ?? "local";
+    knownAgents({ on: m.name })
+      .then((list) => (TOOLS[key] = list))
+      .catch(() => {});
+  }
+}
+
 // `@machine #agent ~/folder what to do`: the leading @, # and path words in any order,
 // the rest is the prompt.
 function parse(text, names) {
@@ -162,13 +177,22 @@ function parse(text, names) {
       if (m !== "local" && !names.includes(m)) return { error: `no machine ${w} (local, ${names.join(", ")})` };
       out.machine = m === "local" ? null : m;
     } else if (w.startsWith("#")) {
-      if (!HARNESS[w.slice(1)]) return { error: `no agent ${w} (${Object.keys(HARNESS).join(", ")})` };
       out.harness = w.slice(1);
     } else if (/^[~/]/.test(w)) out.folder = w;
     else break;
     words.shift();
   }
   out.prompt = words.join(" ");
+  const where = out.machine ?? "local";
+  const tools = TOOLS[where];
+  const tool = tools?.find((a) => a.key === out.harness);
+  if (tools && !tool && !HARNESS[out.harness]) {
+    const have = tools.filter((a) => a.installed).map((a) => a.key);
+    return { error: `no agent #${out.harness} (on ${where}: ${have.join(", ") || "none installed"})` };
+  }
+  if (!tools && !HARNESS[out.harness]) return { error: `no agent #${out.harness} (${Object.keys(HARNESS).join(", ")})` };
+  if (tool && !tool.installed) return { error: `#${out.harness} isn't installed on ${where}` };
+  out.run = tool?.run ?? null;
   return out.prompt ? out : { error: "nothing to send" };
 }
 
@@ -209,10 +233,14 @@ const lostOf = (machine, all, byPane) =>
     (t) =>
       t.state === "live" &&
       machineOf(t.address) === machine &&
-      t.labels?.resume &&
+      SAFE.test(t.labels?.resume ?? "") &&
       !resumeOf(t.argv ?? []) &&
       (byPane.find((p) => p.terminal === t.address)?.program ?? t.program)?.shell,
   );
+
+// Restore types a label into a shell, and anything on that machine can set labels, so
+// only the three forms this mod and its Claude hook write are typed.
+const SAFE = /^(claude --resume [\w-]+|pi --session-id [\w-]+|omp --continue)$/;
 
 function restore(lost) {
   for (const t of lost) hc(["send", t.address, t.labels.resume]);
@@ -230,6 +258,7 @@ export default class Sidebar extends View {
     this.folded = loadFolded();
     this.homes = {};
     this.error = null;
+    loadTools();
     // The dialog: a big textarea, and nothing else this mod does in the sidebar.
     if (props()?.composer) {
       this.area = TextareaState.new({ placeholder: PLACEHOLDER, value: props().value ?? "" });
@@ -255,6 +284,7 @@ export default class Sidebar extends View {
       );
       return;
     }
+    cx.timer.every(60000, () => loadTools());
     // Label new agents with their resume command while they still run it.
     cx.timer.every(3000, () => {
       for (const t of terminals()) {
@@ -306,7 +336,8 @@ export default class Sidebar extends View {
         const h = await this.homeOf(p.machine);
         folder = h ? folder.replace(/^~/, h) : "";
       }
-      const { argv } = HARNESS[p.harness](uuid());
+      // claude, pi and omp start resumable; any other agent the way herdr-app starts it.
+      const argv = HARNESS[p.harness] ? HARNESS[p.harness](uuid()).argv : p.run;
       const name = p.prompt.split(/\s+/).slice(0, 4).join(" ").slice(0, 28);
       const space = spaceOf(p.machine);
       const at = folder ? { folder } : {};
@@ -415,6 +446,7 @@ export default class Sidebar extends View {
   }
 
   render() {
+    C = palette(theme());
     if (this.area) return this.composer();
     const th = theme();
     const tabs = spaces().flatMap((s) => s.tabs);
@@ -469,7 +501,7 @@ export default class Sidebar extends View {
         .child(div().flex_none().w(5).h(24).rounded(3).bg(th[g.color]))
         .when(Boolean(term.parent), (el) => el.child(div().flex_none().text_color(C.dim).child("↳")))
         .child(tile(th, program(term, pane), stateOf(term, pane)))
-        .child(div().flex_1().min_w(0).truncate().text_color(on ? C.text : "#c4c6ca").child(label(term, pane, tab)))
+        .child(div().flex_1().min_w(0).truncate().text_color(on ? C.text : C.muted).child(label(term, pane, tab)))
         .when(this.hovered === term.address && !this.pressed, (el) =>
           el.child(
             own(div())
@@ -609,7 +641,7 @@ export default class Sidebar extends View {
       .rounded(8)
       .bg(C.chip)
       .border_1()
-      .border_color("#ffffff14")
+      .border_color(C.rowEdge)
       .cursor_text()
       .text_size(12.5)
       .text_color(C.dim)
@@ -635,7 +667,7 @@ export default class Sidebar extends View {
           .pt(4)
           .pb(8)
           .border_t_1()
-          .border_color("#ffffff0d")
+          .border_color(C.rowEdge)
           .child(footRow("ms-settings", "settings", "Settings", () => run("app.settings"))),
       );
   }
