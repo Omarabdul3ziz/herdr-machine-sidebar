@@ -31,10 +31,12 @@ merge `keys.json`, and use it as a layout's sidebar block
 
 ## sidebar-bot
 
-A small bot drawn from theme-coloured boxes, meant as a 110 px block above the
+A small bot drawn from theme-coloured boxes, meant as a 160 px block above the
 sidebar. It acts out the most urgent agent on any machine: asleep when nothing
 runs, at a laptop while agents work, antenna pulsing red with a bubble when one
-needs you, a hop and a ✓ when one is done. Click it to jump to that agent;
+needs you, a hop and sparkles when one is done. Its thoughts pop up in a cloud
+above it: what needs you comes back every few seconds, otherwise a passing
+thought now and then. Click it to jump to that agent;
 `ctrl+shift+y` hides it (`layout.toggle:bot`). In the layout, the sidebar is a
-column: `{ "id": "bot", "size": { "px": 110 }, "content": { "mod": "sidebar-bot" } }`
+column: `{ "id": "bot", "size": { "px": 160 }, "content": { "mod": "sidebar-bot" } }`
 above the `machine-sidebar` block.
