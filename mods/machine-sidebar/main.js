@@ -53,10 +53,17 @@ function close(term, pane, tab) {
   else run("terminal.kill", { terminal: term.address });
 }
 
-function open(term, pane) {
-  if (pane) run("pane.focus", { terminal: term.address });
-  else if (term.program?.agent || term.parent) run("agent.focus", { terminal: term.address });
-  else run("terminal.peek", { terminal: term.address });
+// A terminal started elsewhere (hc run --bg, another window) has no pane here: give it a tab,
+// then show it once the tab exists (keep on another machine is async and doesn't switch).
+function open(term, pane, cx) {
+  if (pane) return run("pane.focus", { terminal: term.address });
+  run("terminal.keep", { terminal: term.address, place: "tab" });
+  let tries = 30;
+  const show = (c) => {
+    if (panes().some((p) => p.terminal === term.address)) return run("pane.focus", { terminal: term.address });
+    if (--tries > 0) c.timer.after(100, show);
+  };
+  cx.timer.after(100, show);
 }
 
 const URGENT = ["blocked", "done", "working"];
@@ -490,7 +497,7 @@ export default class Sidebar extends View {
           cx.notify();
           // No press on this row (the × took it): nothing to do.
           if (!from) return;
-          if (from.address === term.address) return open(term, pane);
+          if (from.address === term.address) return open(term, pane, cx);
           const same = machineOf(from.address) === machineOf(term.address);
           if (same && from.tab && tab && from.tab.id !== tab.id) run("tab.move", { id: from.tab.id, index: tab.index });
         })
